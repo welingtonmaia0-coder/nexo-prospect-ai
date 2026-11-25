@@ -34,7 +34,16 @@ Deno.serve(async request => {
       body:JSON.stringify({contents:[{parts:[{text:prompt}]}],tools:[{google_search:{}}],generationConfig:{maxOutputTokens:4096}}),
       signal:AbortSignal.timeout(55000),
     });
-    if (!response.ok) return reply(response.status===429?429:502,{error:response.status===429?'Cota gratuita do Gemini indisponível ou esgotada. Tente depois.':'O Gemini não concluiu a pesquisa. Verifique a chave e o modelo configurado.'});
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      const reasons = (failure.error?.details || []).map((detail:{reason?:string}) => detail.reason);
+      let error = 'O Gemini recusou a pesquisa (HTTP ' + response.status + '). Verifique as restrições da chave e o acesso ao modelo.';
+      if (reasons.includes('API_KEY_INVALID')) error = 'A chave configurada não é uma chave de API Gemini válida. Use uma chave criada no Google AI Studio.';
+      else if (reasons.includes('SERVICE_DISABLED')) error = 'A API Gemini não está habilitada no projeto desta chave.';
+      else if (response.status === 429) error = 'Cota gratuita do Gemini indisponível ou esgotada. Tente depois.';
+      else if (response.status === 404) error = 'O modelo Gemini configurado não está disponível para esta chave.';
+      return reply(response.status===429?429:502,{error});
+    }
     const result = await response.json();
     const candidate = result.candidates?.[0];
     if (candidate?.finishReason !== 'STOP') return reply(502,{error:'A resposta da pesquisa ficou incompleta. Tente uma região mais específica.'});
