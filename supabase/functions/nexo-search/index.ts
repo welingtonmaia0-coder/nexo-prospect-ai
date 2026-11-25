@@ -17,7 +17,8 @@ Deno.serve(async request => {
     });
     const {data:{user}, error:authError} = await client.auth.getUser();
     if (authError || !user) return reply(401,{error:'Entre na sua conta para pesquisar.'});
-    const key = Deno.env.get('GEMINI_API_KEY');
+    // Accept the existing secret name configured in this project.
+    const key = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('Gemni_API_Key');
     if (!key) return reply(503,{error:'A busca aguarda a configuração da chave Gemini no servidor.'});
     const input = await request.json();
     for (const field of ['niche','city','state','neighborhood']) {
