@@ -25,7 +25,7 @@ async function showAccount() {
       <p>Salve os cadastros deste navegador na sua conta. No outro dispositivo, entre na mesma conta e carregue os cadastros.</p>
       <div class="dialog-actions"><button class="btn btn-secondary" data-cloud="pull">Carregar da minha conta</button><button class="btn btn-primary" data-cloud="push">Salvar na minha conta</button></div>
       <button class="btn btn-ghost" data-cloud="logout" style="margin-top:20px">Sair da conta</button>` :
-    `<form id="cloudAuth" style="display:grid;gap:18px;margin-top:22px"><label>E-mail<input name="email" type="email" required autocomplete="username"></label><label>Senha<input name="password" type="password" required minlength="8" autocomplete="current-password"></label><button class="btn btn-primary" type="submit">Entrar</button><button class="btn btn-secondary" type="button" data-cloud="signup">Criar conta</button></form>`}
+    `<button class="btn btn-ghost" type="button" data-cloud="google" style="width:100%;margin-top:22px">Continuar com Google</button><p style="text-align:center;margin-top:16px;font-size:14px">ou use seu e-mail</p><form id="cloudAuth" style="display:grid;gap:18px;margin-top:22px"><label>E-mail<input name="email" type="email" required autocomplete="username"></label><label>Senha<input name="password" type="password" required minlength="8" autocomplete="current-password"></label><button class="btn btn-primary" type="submit">Entrar</button><button class="btn btn-secondary" type="button" data-cloud="signup">Criar conta</button></form>`}
     <p role="status" aria-live="polite" style="margin-top:20px;font-size:14px"></p>`;
   if (!accountDialog.open) accountDialog.showModal();
 }
@@ -108,6 +108,25 @@ accountDialog.addEventListener('click', event => {
   if (!button || cloudBusy) return;
   if (button.dataset.cloud === 'close') return accountDialog.close();
   runCloud(async () => {
+    if (button.dataset.cloud === 'google') {
+      const response = await fetch('https://cozxensmcokrotntodog.supabase.co/auth/v1/settings', {
+        headers: { apikey: 'sb_publishable_3BjDtta6BNWh3ltWmCM1WQ_32s2XxGt' }
+      });
+      if (!response.ok) throw new Error('Não foi possível consultar o acesso Google. Tente novamente.');
+      const settings = await response.json();
+      if (!settings.external?.google) {
+        throw new Error('O acesso Google aguarda a configuração das credenciais pelo administrador. Você pode entrar por e-mail enquanto isso.');
+      }
+      const { error } = await cloudClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'https://nexo-prospect-ai.vercel.app/',
+          scopes: 'openid email profile',
+          queryParams: { prompt: 'select_account' }
+        }
+      });
+      if (error) throw new Error('Não foi possível iniciar o acesso Google. Tente novamente.');
+    }
     if (button.dataset.cloud === 'signup') {
       const form = accountDialog.querySelector('form');
       if (!form.reportValidity()) return;
@@ -139,3 +158,12 @@ accountButton.className = 'btn btn-secondary';
 accountButton.textContent = 'Minha conta';
 accountButton.addEventListener('click', showAccount);
 document.querySelector('.top-right').prepend(accountButton);
+
+// The SDK validates the callback before displaying the authenticated account.
+if (location.hash.includes('access_token=') || location.hash.includes('error=')) {
+  cloudClient.auth.getSession().then(async ({ data, error }) => {
+    history.replaceState(null, '', location.pathname + location.search + '#inicio');
+    await showAccount();
+    if (error || !data.session) cloudMessage('O acesso não foi concluído. Tente entrar novamente.');
+  }).catch(() => toast('Não foi possível concluir o acesso. Abra Minha conta para tentar novamente.'));
+}
